@@ -5,6 +5,18 @@ import type { PDFViewer } from "./viewer";
 export interface SignatureImage { url: string; width: number; height: number }
 export interface SignatureTarget { id: string; label: string; rect: number[]; kind: "field" | "label" }
 const cache = new WeakMap<PDFDocumentProxy, Map<number, Promise<SignatureTarget[]>>>();
+// getSignatures() scans the whole document, so it runs once per document rather than on every page flip.
+const signedCache = new WeakMap<PDFDocumentProxy, Promise<boolean>>();
+
+function hasSignedFields(pdf: PDFDocumentProxy) {
+  let signed = signedCache.get(pdf);
+  if (!signed) {
+    signed = pdf.getSignatures().then(fields => !!fields?.length);
+    signedCache.set(pdf, signed);
+    signed.catch(() => signedCache.delete(pdf));
+  }
+  return signed;
+}
 
 export function detectSignatureTargets(pdf: PDFDocumentProxy, pageNumber: number) {
   let pages = cache.get(pdf);
@@ -14,8 +26,7 @@ export function detectSignatureTargets(pdf: PDFDocumentProxy, pageNumber: number
     result = (async () => {
       const page = await pdf.getPage(pageNumber);
       const annotations = await page.getAnnotations();
-      const signedFields = await pdf.getSignatures();
-      if (signedFields?.length) return [];
+      if (await hasSignedFields(pdf)) return [];
       const fields: SignatureTarget[] = annotations.filter(annotation => annotation.subtype === "Widget"
         && annotation.fieldType === "Sig" && !annotation.fieldValue && !(annotation.fieldFlags & 1)
         && !(annotation.annotationFlags & 35) && annotation.rect.length === 4 && annotation.rect.every(Number.isFinite))

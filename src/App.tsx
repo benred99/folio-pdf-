@@ -25,7 +25,7 @@ import { HighlightMenu, NoteBox, SelectionPopover, useTextSelection, type Select
 import { NotesPanel } from "./NotesPanel";
 import { notesJson, notesMarkdown } from "./noteExport";
 import { copyText } from "./clipboard";
-import { imageRegions, trackPageImages } from "./nightImages";
+import { imageRegions, setNightImages, trackPageImages } from "./nightImages";
 import { recognizeScannedPages } from "./pageOcr";
 import { ImageMenu, ImageViewer, type ImageTarget } from "./ImageViewer";
 import { MoreMenu, type MoreItem } from "./MoreMenu";
@@ -127,6 +127,9 @@ function saveBlob(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+// Shared so resetting to "no targets" is a no-op for React.
+const NO_SIGNATURE_TARGETS: SignatureTarget[] = [];
+
 export default function App({ tabs, tabKey, upgradeNotes }: { tabs: DocumentTabs; tabKey: number; upgradeNotes: Release[] }) {
   const headerRef = useRef<HTMLElement>(null);
   const active = useSyncExternalStore(tabs.subscribe, () => tabs.active === tabKey);
@@ -200,7 +203,7 @@ export default function App({ tabs, tabKey, upgradeNotes }: { tabs: DocumentTabs
   const [error, setError] = useState<string | null>(null);
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [signing, setSigning] = useState(false);
-  const [signatureTargets, setSignatureTargets] = useState<SignatureTarget[]>([]);
+  const [signatureTargets, setSignatureTargets] = useState<SignatureTarget[]>(NO_SIGNATURE_TARGETS);
   const [signatureDismissed, setSignatureDismissed] = useState(false);
   const [markup, setMarkup] = useState<MarkupState>({ marks: [], note: "", bookmarkedPages: null });
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("pages");
@@ -222,7 +225,8 @@ export default function App({ tabs, tabKey, upgradeNotes }: { tabs: DocumentTabs
   }, [active, doc, focus, dialog, signing, pending, imageView]);
 
   useEffect(() => {
-    setSigning(false); setSignatureTargets([]); setSignatureDismissed(false);
+    // Functional setters keep the same state when nothing changed, so a page flip doesn't re-render App.
+    setSigning(false); setSignatureTargets(targets => targets.length ? NO_SIGNATURE_TARGETS : targets); setSignatureDismissed(false);
     if (!doc || contentEditing) return;
     let cancelled = false;
     const timer = setTimeout(() => {
@@ -360,9 +364,13 @@ export default function App({ tabs, tabKey, upgradeNotes }: { tabs: DocumentTabs
       setError(null);
       let unattached: PDFDocumentProxy | undefined;
       try {
+        // Hash while pdf.js parses; loadPdf hands the worker a copy, so `data` stays intact. The no-op catch
+        // keeps a failed load from leaving this promise's rejection unhandled (the await below still throws).
+        const hashing = contentKey(data);
+        hashing.catch(() => {});
         const pdf = await loadPdf(data, signal, password);
         unattached = pdf;
-        const id = await contentKey(data);
+        const id = await hashing;
         signal.throwIfAborted();
         const existing = revision ? undefined : await getRecent(id);
         const historyAllowed = !password && data.byteLength <= MAX_RECENT_FILE_BYTES && (revision ? revision.historyAllowed :
@@ -430,7 +438,15 @@ export default function App({ tabs, tabKey, upgradeNotes }: { tabs: DocumentTabs
         setLoading(false);
         // Password-protected documents stay out of Recent: it would keep their bytes and a page-1
         // thumbnail unprotected on disk. Very large files are skipped too — see MAX_RECENT_FILE_BYTES.
+        // The thumbnail render and the blob write wait for the first page so they don't compete with it for the pdf.js worker.
         if (!revision && !password && data.byteLength <= MAX_RECENT_FILE_BYTES) void (async () => {
+          await new Promise<void>(resolve => {
+            const bus = busRef.current!;
+            const done = () => { clearTimeout(timer); bus.off("pagerendered", done); resolve(); };
+            const timer = setTimeout(done, 4000);
+            bus.on("pagerendered", done);
+          });
+          if (signal.aborted) return;
           const thumb = existing?.thumb || (await thumbnailDataUrl(pdf).catch(() => ""));
           if (signal.aborted) return;
           await saveRecent({
@@ -441,7 +457,8 @@ export default function App({ tabs, tabKey, upgradeNotes }: { tabs: DocumentTabs
             openedAt: Date.now(),
             lastPage: pageRef.current,
             thumb,
-            data: pdfBlob(data),
+            // Same content id means the stored bytes are identical, so only the metadata is rewritten.
+            data: existing ? undefined : pdfBlob(data),
           });
         })().catch(() => {});
         return true;
@@ -991,6 +1008,8 @@ export default function App({ tabs, tabKey, upgradeNotes }: { tabs: DocumentTabs
   }, []);
 
   useEffect(() => localStorage.setItem("folio:sidebar", sidebar ? "1" : "0"), [sidebar]);
+  // Image overlays are only painted while night reading is on; this also covers the setting changing in another window.
+  useEffect(() => setNightImages(night), [night]);
   const setNightTo = (next: boolean) => {
     try { localStorage.setItem("folio:night", next ? "1" : "0"); }
     catch { flash("PDF dark mode changed, but couldn't save the preference."); }

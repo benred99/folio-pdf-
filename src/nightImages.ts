@@ -2,7 +2,8 @@
 // To keep images true to color, each rendered page gets an unfiltered overlay canvas holding just its
 // image regions, copied from the original rendering. pdf.js records where images are drawn
 // (normalized to the canvas) the first time a page renders with image recording on.
-// The overlay is only displayed in night reading (see reading-tools.css).
+// The overlay is only displayed in night reading (see reading-tools.css), so the pixel copy only happens
+// then: day reading just notes what was rendered, and turning night reading on paints those pages.
 import type { EventBus } from "./viewer";
 
 interface PageLike {
@@ -53,8 +54,39 @@ export function imageRegions(page: PageLike | null | undefined, rotation: number
   return regions;
 }
 
-/** Draws the image regions of `source` into an overlay canvas inside `host` (removes it if there are none). */
+let nightOn = false;
+/** Canvases that have been rendered, with what's needed to paint their overlay later (held weakly; viewer and sidebar canvases come and go). */
+const rendered = new Set<WeakRef<HTMLCanvasElement>>();
+const renderedRef = new WeakMap<HTMLCanvasElement, { ref: WeakRef<HTMLCanvasElement>; page: PageLike | null | undefined; rotation: number }>();
+
+/** Turns the overlay copy on or off; turning it on paints every page and thumbnail that is already rendered. */
+export function setNightImages(on: boolean) {
+  if (on === nightOn) return;
+  nightOn = on;
+  for (const ref of [...rendered]) {
+    const canvas = ref.deref();
+    if (!canvas?.isConnected) { rendered.delete(ref); continue; }
+    const entry = renderedRef.get(canvas);
+    if (on && entry && canvas.parentElement) drawOverlay(canvas.parentElement, canvas, entry.page, entry.rotation);
+  }
+}
+
+/** Notes that `source` has just been rendered and, in night reading, draws its image regions into an overlay canvas inside `host` (removes it if there are none). */
 export function paintImageOverlay(host: Element, source: HTMLCanvasElement, page: PageLike | null | undefined, rotation: number) {
+  // Regions are normalized against the rotation of the first render, so fix it now even if nothing is painted yet.
+  if (page?.imageCoordinates && page.imageCoordinates.length >= 6 && !capturedRotation.has(page)) capturedRotation.set(page, rotation);
+  const known = renderedRef.get(source);
+  if (known) { known.page = page; known.rotation = rotation; }
+  else {
+    const ref = new WeakRef(source);
+    renderedRef.set(source, { ref, page, rotation });
+    rendered.add(ref);
+  }
+  if (nightOn) drawOverlay(host, source, page, rotation);
+  else host.querySelector(":scope > canvas.folio-image-overlay")?.remove();
+}
+
+function drawOverlay(host: Element, source: HTMLCanvasElement, page: PageLike | null | undefined, rotation: number) {
   const coords = page?.imageCoordinates;
   let overlay = host.querySelector<HTMLCanvasElement>(":scope > canvas.folio-image-overlay");
   if (!page || !coords || coords.length < 6 || !source.width || !source.height) {

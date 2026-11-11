@@ -152,27 +152,50 @@ export function AiPanel({ pdf, docId, persist, docName, context, onClearContext,
     });
   }, [ai, provider, chatgptConnected]);
 
-  // Stream answers into the last assistant message.
+  // Stream answers into the last assistant message. Deltas arrive per token, but re-parsing the whole answer as
+  // Markdown and laying the list out that often is wasteful, so they collect here and reach state once per frame.
+  const pendingText = useRef("");
+  const flushFrame = useRef(0);
+  const flushDeltas = useCallback(() => {
+    if (flushFrame.current) { cancelAnimationFrame(flushFrame.current); flushFrame.current = 0; }
+    const text = pendingText.current;
+    if (!text) return;
+    pendingText.current = "";
+    setMessages((list) => {
+      const last = list[list.length - 1];
+      if (!last || last.role !== "assistant") return list;
+      const next = list.slice();
+      next[next.length - 1] = { ...last, content: last.content + text };
+      return next;
+    });
+  }, []);
   useEffect(() => {
     if (!ai) return;
     return ai.onEvent((event) => {
       if (event.id !== busyRef.current) return;
-      setMessages((list) => {
-        const next = list.slice();
-        const last = next[next.length - 1];
-        if (!last || last.role !== "assistant") return list;
-        if (event.type === "delta") next[next.length - 1] = { ...last, content: last.content + (event.text ?? "") };
-        if (event.type === "error") next[next.length - 1] = { ...last, error: { message: event.message ?? "Something went wrong.", code: event.code, link: event.link } };
-        return next;
-      });
-      if (event.type !== "delta") {
-        busyRef.current = null;
-        setBusy(null);
-        if (event.code === "signed_out") void ai.status().then(setStatus);
+      if (event.type === "delta") {
+        pendingText.current += event.text ?? "";
+        if (!flushFrame.current) flushFrame.current = requestAnimationFrame(() => { flushFrame.current = 0; flushDeltas(); });
+        return;
       }
+      // Anything still waiting belongs before the end of the answer (or its error).
+      flushDeltas();
+      if (event.type === "error") {
+        setMessages((list) => {
+          const last = list[list.length - 1];
+          if (!last || last.role !== "assistant") return list;
+          const next = list.slice();
+          next[next.length - 1] = { ...last, error: { message: event.message ?? "Something went wrong.", code: event.code, link: event.link } };
+          return next;
+        });
+      }
+      busyRef.current = null;
+      setBusy(null);
+      if (event.code === "signed_out") void ai.status().then(setStatus);
     });
-  }, [ai]);
+  }, [ai, flushDeltas]);
 
+  // The scroll follows the answer as it grows; doing it here, after the frame's flush has rendered, costs one layout per frame.
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -186,11 +209,18 @@ export function AiPanel({ pdf, docId, persist, docName, context, onClearContext,
   messagesRef.current = messages;
   useEffect(() => () => {
     preparing.current = null;
+    cancelAnimationFrame(flushFrame.current);
+    flushFrame.current = 0;
+    // Text received but not yet flushed to state is part of what was answered.
+    const unflushed = pendingText.current;
+    pendingText.current = "";
     const id = busyRef.current;
     if (!id) return;
     busyRef.current = null;
     void ai?.cancel(id);
-    const list = messagesRef.current;
+    let list = messagesRef.current;
+    const tail = list[list.length - 1];
+    if (unflushed && tail?.role === "assistant") list = [...list.slice(0, -1), { ...tail, content: tail.content + unflushed }];
     const last = list[list.length - 1];
     const kept = last?.role === "assistant" && !last.content && !last.error ? list.slice(0, -1) : list;
     conversations.set(docId, kept);
@@ -225,6 +255,7 @@ export function AiPanel({ pdf, docId, persist, docName, context, onClearContext,
     } catch {
       if (busyRef.current !== id) return;
       preparing.current = null;
+      flushDeltas();
       busyRef.current = null;
       setBusy(null);
       setMessages((list) => {
@@ -233,7 +264,7 @@ export function AiPanel({ pdf, docId, persist, docName, context, onClearContext,
         return next;
       });
     }
-  }, [ai, pdf, context, messages, provider, model, docName, onClearContext, ready]);
+  }, [ai, pdf, context, messages, provider, model, docName, onClearContext, ready, flushDeltas]);
 
   const signIn = async () => {
     if (!ai) return;
