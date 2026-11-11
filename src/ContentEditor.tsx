@@ -11,6 +11,27 @@ interface Surface { page: number; host: HTMLDivElement; viewport: PageViewport }
 interface Selected { page: number; target: EditTarget; paper: string }
 export interface NextSelection { from: PDFDocumentProxy; page: number; target: EditTarget }
 
+// Each edit reloads the document and remounts the editor. Starting a worker means compiling pdfium again, so the
+// worker is handed from one mount to the next and only stopped once Edit mode has been off for a moment.
+let idleWorker: { worker: Worker; timer: number } | null = null;
+let generation = 0;
+function takeWorker() {
+  const idle = idleWorker;
+  idleWorker = null;
+  if (idle) { clearTimeout(idle.timer); return idle.worker; }
+  return new Worker(new URL("./contentEditor.worker.ts", import.meta.url), { type: "module" });
+}
+function parkWorker(worker: Worker) {
+  idleWorker?.worker.terminate();
+  if (idleWorker) clearTimeout(idleWorker.timer);
+  const stop = () => { worker.terminate(); if (idleWorker?.worker === worker) { clearTimeout(idleWorker.timer); idleWorker = null; } };
+  worker.onmessage = null;
+  worker.onerror = stop;
+  // Don't hold the document's bytes while nothing is being edited.
+  worker.postMessage({ source: new Uint8Array(0), gen: 0 } satisfies EditorRequest);
+  idleWorker = { worker, timer: window.setTimeout(stop, 10_000) };
+}
+
 function rectangle(t: EditTarget, v: PageViewport) {
   const [x1, y1] = v.convertToViewportPoint(t.box[0], t.box[1]);
   const [x2, y2] = v.convertToViewportPoint(t.box[2], t.box[3]);
@@ -65,7 +86,8 @@ export function ContentEditor({ ref, nextSelection, pdf, viewer, bus, snapshot, 
   useEffect(() => { onDirty(!!modified || busy); return () => onDirty(false); }, [modified, busy, onDirty]);
 
   useEffect(() => {
-    const w = new Worker(new URL("./contentEditor.worker.ts", import.meta.url), { type: "module" });
+    const w = takeWorker(), gen = ++generation;
+    let broken = false;
     worker.current = w;
     const hosts = new Map<number, HTMLDivElement>(), requested = new Set<number>();
     let initialized = false, frame = 0;
@@ -97,22 +119,24 @@ export function ContentEditor({ ref, nextSelection, pdf, viewer, bus, snapshot, 
     for (const event of events) bus.on(event, schedule);
     const fail = (reason: Error) => { setError(reason.message); waiter.current?.reject(reason); waiter.current = null; };
     w.onmessage = ({ data }: MessageEvent<EditorReply>) => {
+      if (data.gen !== gen) return;
       if ("error" in data) {
         if (data.page === undefined) fail(new Error(data.error));
         else setError(data.error);
       } else if ("bytes" in data) { waiter.current?.resolve(data.bytes); waiter.current = null; }
       else setTargets(old => new Map(old).set(data.page, data.targets));
     };
-    w.onerror = () => fail(new Error("The PDF editor stopped. Exit and re-enter Edit mode to try again."));
+    w.onerror = () => { broken = true; fail(new Error("The PDF editor stopped. Exit and re-enter Edit mode to try again.")); };
     void pdf.getData().then(source => {
       if (worker.current !== w) return;
-      w.postMessage({ source } satisfies EditorRequest); initialized = true; schedule();
+      w.postMessage({ source, gen } satisfies EditorRequest, [source.buffer as ArrayBuffer]); initialized = true; schedule();
     }).catch(() => { if (worker.current === w) fail(new Error("Couldn't read this PDF for editing.")); });
     schedule();
     return () => {
       for (const event of events) bus.off(event, schedule);
       cancelAnimationFrame(frame);
-      w.terminate(); worker.current = null;
+      if (broken) w.terminate(); else parkWorker(w);
+      worker.current = null;
       waiter.current?.reject(new Error("The document changed.")); waiter.current = null;
       for (const host of hosts.values()) host.remove();
     };
@@ -133,7 +157,7 @@ export function ContentEditor({ ref, nextSelection, pdf, viewer, bus, snapshot, 
         if (worker.current !== w) return false;
         const result = await new Promise<Uint8Array>((resolve,reject) => {
           waiter.current = { resolve, reject };
-          w.postMessage({ page: selected.page, change, snapshot: data } satisfies EditorRequest);
+          w.postMessage({ page: selected.page, change, snapshot: data } satisfies EditorRequest, [data.buffer as ArrayBuffer]);
         });
         const detail: PdfChange = change.kind === "text"
           ? { kind: "text", page: selected.page, before: selected.target.label, after: change.text }
