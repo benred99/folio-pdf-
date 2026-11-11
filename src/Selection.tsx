@@ -27,19 +27,29 @@ export function useTextSelection(container: HTMLElement | null, enabled: boolean
     }
     let frame = 0;
     let pointerDown = false;
+    // Scrolling re-measures the selection every frame; only publish when the anchor actually moved, so the app doesn't re-render per frame.
+    let last: (SelectionInfo & { pdf: PDFDocumentProxy }) | null = null;
+    const publish = (next: (SelectionInfo & { pdf: PDFDocumentProxy }) | null) => {
+      if (next === null ? last === null : last !== null && next.text === last.text && next.page === last.page
+        && next.x === last.x && next.top === last.top && next.bottom === last.bottom
+        && next.range.compareBoundaryPoints(Range.START_TO_START, last.range) === 0
+        && next.range.compareBoundaryPoints(Range.END_TO_END, last.range) === 0) return;
+      last = next;
+      setInfo(next);
+    };
     const update = () => {
       frame = 0;
       const selection = document.getSelection();
-      if (pointerDown || !selection || selection.isCollapsed || !selection.rangeCount) return setInfo(null);
+      if (pointerDown || !selection || selection.isCollapsed || !selection.rangeCount) return publish(null);
       const anchor = selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode?.parentElement;
-      if (!anchor || !container.contains(anchor) || !anchor.closest(".textLayer")) return setInfo(null);
+      if (!anchor || !container.contains(anchor) || !anchor.closest(".textLayer")) return publish(null);
       const text = selection.toString().replace(/\s+/g, " ").trim();
       const rects = [...selection.getRangeAt(0).getClientRects()].filter((r) => r.width > 0 && r.height > 0);
-      if (!text || !rects.length) return setInfo(null);
+      if (!text || !rects.length) return publish(null);
       const stage = (container.parentElement ?? container).getBoundingClientRect();
       const left = Math.min(...rects.map((r) => r.left));
       const right = Math.max(...rects.map((r) => r.right));
-      setInfo({
+      publish({
         pdf,
         text,
         range: selection.getRangeAt(0).cloneRange(),
@@ -50,7 +60,7 @@ export function useTextSelection(container: HTMLElement | null, enabled: boolean
       });
     };
     const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
-    const down = (e: PointerEvent) => { if (e.button === 0) { pointerDown = true; setInfo(null); } };
+    const down = (e: PointerEvent) => { if (e.button === 0) { pointerDown = true; publish(null); } };
     const up = () => { if (pointerDown) { pointerDown = false; schedule(); } };
     document.addEventListener("selectionchange", schedule);
     container.addEventListener("pointerdown", down);

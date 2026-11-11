@@ -118,15 +118,29 @@ export async function getRecent(id: string): Promise<RecentFile | undefined> {
   }
 }
 
-export async function saveRecent(file: RecentFile) {
+/** Without `data`, the stored blob is kept as is: the id is a content hash, so reopening needs only fresh metadata, not another copy of up to 50 MB. */
+export async function saveRecent(file: Omit<RecentFile, "data"> & { data?: Blob }) {
   try {
     await tx("readwrite", (store) => {
-      store.put(file);
-      const all: IDBRequest<RecentFile[]> = store.getAll();
-      all.onsuccess = () => {
-        for (const old of all.result.sort((a, b) => b.openedAt - a.openedAt).slice(MAX_RECENT)) store.delete(old.id);
+      const prune = () => {
+        const all: IDBRequest<RecentFile[]> = store.getAll();
+        all.onsuccess = () => {
+          for (const old of all.result.sort((a, b) => b.openedAt - a.openedAt).slice(MAX_RECENT)) store.delete(old.id);
+        };
+        return all;
       };
-      return all;
+      if (file.data) {
+        store.put(file as RecentFile);
+        return prune();
+      }
+      const stored = store.get(file.id);
+      stored.onsuccess = () => {
+        // A card removed in the meantime stays removed: there are no bytes to restore it with.
+        const data = (stored.result as RecentFile | undefined)?.data;
+        if (data) store.put({ ...file, data });
+        prune();
+      };
+      return stored;
     });
   } catch {
     /* storage may be unavailable (private mode); recent files are best-effort */
