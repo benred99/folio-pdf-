@@ -14,8 +14,10 @@ export interface EditTarget {
   style?: { origin: number[]; axis: number[]; size: number; flags: number; bold: boolean; color: string };
 }
 export type Change = { kind: "text"; index: number; text: string } | { kind: "image"; index: number; file: File };
-export type EditorRequest = { source: Uint8Array } | { page: number } | { page: number; change: Change; snapshot: Uint8Array };
-export type EditorReply = { page: number; targets: EditTarget[] } | { bytes: Uint8Array } | { error: string; page?: number };
+// One worker serves every revision of a document while Edit mode stays on. `gen` names the revision a request
+// was made for, so the editor can drop replies that belong to the revision before an edit.
+export type EditorRequest = { source: Uint8Array; gen: number } | { page: number } | { page: number; change: Change; snapshot: Uint8Array };
+export type EditorReply = { gen: number } & ({ page: number; targets: EditTarget[] } | { bytes: Uint8Array } | { error: string; page?: number });
 
 const ready = (async () => {
   const response = await fetch(wasmUrl);
@@ -25,6 +27,7 @@ const ready = (async () => {
   return engine;
 })();
 let source: Uint8Array;
+let gen = 0;
 
 function buffer<T>(m: WrappedPdfiumModule, size: number, use: (ptr: number) => T): T {
   const ptr = m.pdfium.wasmExports.malloc(size);
@@ -159,13 +162,14 @@ function replaceText(m: WrappedPdfiumModule, page: number, target: EditTarget, t
 }
 
 self.onmessage = async ({ data }: MessageEvent<EditorRequest>) => {
-  if ("source" in data) { source = data.source; return; }
+  if ("source" in data) { source = data.source; gen = data.gen; return; }
+  const at = gen, bytes = source;
   try {
     const m = await ready;
     const { page } = data;
     if (!("change" in data)) {
-      const { targets } = withPage(m, source, page, (_doc, handle) => pageView(m, handle));
-      self.postMessage({ page, targets } satisfies EditorReply);
+      const { targets } = withPage(m, bytes, page, (_doc, handle) => pageView(m, handle));
+      self.postMessage({ gen: at, page, targets } satisfies EditorReply);
       return;
     }
     const { change, snapshot } = data;
@@ -178,10 +182,10 @@ self.onmessage = async ({ data }: MessageEvent<EditorRequest>) => {
       if (!m.FPDFPage_GenerateContent(handle)) throw new Error("Couldn't write this page.");
       return save(m, doc);
     });
-    const bytes = await result;
-    self.postMessage({ bytes } satisfies EditorReply, { transfer: [bytes.buffer as ArrayBuffer] });
+    const edited = await result;
+    self.postMessage({ gen: at, bytes: edited } satisfies EditorReply, { transfer: [edited.buffer as ArrayBuffer] });
   } catch (reason) {
-    self.postMessage({ error: reason instanceof Error ? reason.message : "Couldn't edit this PDF.",
+    self.postMessage({ gen: at, error: reason instanceof Error ? reason.message : "Couldn't edit this PDF.",
       page: "change" in data ? undefined : data.page } satisfies EditorReply);
   }
 };
