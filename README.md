@@ -62,8 +62,12 @@ URL opening, webpage conversion, and Word conversion require the desktop app. Fa
 
 ### Read and navigate
 
+- **Back and Forward:** after following an internal link or an outline entry, choose **More → Back** to return to
+  your place. The first jump also shows a brief, clickable Back hint. **More → Forward** appears after you go back.
+  Each tab remembers its own positions, zoom, and rotation until the document closes. Use **Alt+← / Alt+→**
+  (**⌥← / ⌥→** on macOS) while reading. Text fields and dialogs keep their normal editing controls.
 - **Continuous scrolling** with selectable text, previous/next controls, and a page-number field for jumping directly
-  to a page. Enable **Settings → Reading → Scroll one page at a time** to turn pages with the mouse wheel.
+  to a page. Enable **Settings → General → Reading → Scroll one page at a time** to turn pages with the mouse wheel.
 - **Pages and Outline tabs:** browse page thumbnails or the PDF's existing outline/bookmarks; hide the sidebar when
   you want more reading space.
 - **Personal bookmarks:** click the ribbon beside a page number in **Pages** to save or remove a bookmark without
@@ -71,6 +75,7 @@ URL opening, webpage conversion, and Word conversion require the desktop app. Fa
   then select a thumbnail to jump to it. These bookmarks are included in Markdown and JSON exports. Folio remembers them locally
   when you reopen a PDF, except for password-protected documents.
 - **Reorder pages** from either sidebar tab. Drag thumbnails or enter a new position, then save and open the reordered PDF copy.
+- **Export selected pages** from the Pages sidebar. Ctrl-click thumbnails (⌘-click on macOS) to select individual pages, or Shift-click for a range. Right-click a selected thumbnail to save those pages in document order as a new PDF.
 - **Search as you type:** match case or whole words, see the current match and total count, browse per-page snippets
   and match counts, and move between matches with `Enter` / `Shift+Enter`.
 - **Flexible views:** fit to width, fit to page, automatic sizing, preset zoom levels, zoom buttons, `Ctrl+wheel` /
@@ -78,6 +83,8 @@ URL opening, webpage conversion, and Word conversion require the desktop app. Fa
 - **Focus mode:** press `F` for distraction-free, fullscreen reading; press `Esc` to return.
 - **Light and dark themes**, plus an independent **⋯ → PDF dark mode** setting that dims bright pages while keeping
   photos and figures in their original colors, including in thumbnails. Both settings survive restarts.
+
+[![The Back to page 1 hint above the reading controls after following a link to page 4](docs/screenshots/back-to-page.png)](docs/screenshots/pdf-link-history.png)
 
 ### Edit existing text and images
 
@@ -94,7 +101,9 @@ The editor works with unsigned, unencrypted PDFs.
 
 ### Highlight, draw, and take notes
 
-- **Select text in scans.** Folio starts recognizing English text in the background when you open a PDF.
+- **Select text in scans.** Folio recognizes English by default. In **Settings → General → Reading → Scan languages**, search
+  for a language by its English or local name. Select the languages in your document. The dropdown shows the total
+  size of any packs to download. Folio keeps them on this device for offline use and re-reads open scans.
   The page you jump to gets priority. A message above the page controls shows when text is still being prepared.
   Once it clears, drag across the words to copy, highlight, or ask about a passage. Recognition runs offline.
 - **One-click highlights:** select text, then choose yellow, green, blue, pink, or red from the selection toolbar;
@@ -104,9 +113,11 @@ The editor works with unsigned, unencrypted PDFs.
 - **Notes on passages:** type into the selection toolbar and press `Enter` to highlight with a note, or press `N`
   with text selected to focus the note box.
 - **Edit existing highlights:** click one to recolor it, edit its note, ask AI about the passage, or remove it.
-- **Draw on a page:** choose **Draw** (`D`) for a freehand pen, rectangle, oval, or arrow. Pick a color, then drag
-  on the page. Shapes can be undone and are included when you save a PDF copy.
-- **Text boxes:** choose **Text** (`T`) to add text to a page, using the same ink palette.
+- **Draw on a page:** choose **Draw** (`D`) for a freehand pen, rectangle, oval, or arrow. With **Pen** selected,
+  choose **Thin**, **Medium**, or **Thick** for your next strokes. Pick a color, then drag on the page.
+  Drawings can be undone and are included when you save a PDF copy.
+- **Text boxes:** choose **Text** (`T`) to add text to a page, using the same ink palette. Click outside the box to
+  finish editing and return to Select. Choose Text again to add another box.
 - **Undo and redo** annotation edits with the usual keyboard shortcuts; choose **Done**, `V`, or `Esc` to leave a
   drawing/text tool and return to selection.
 - **Notes tab:** review highlights, their notes, and text boxes; click an entry to jump to it, edit a highlight's note,
@@ -116,6 +127,11 @@ The editor works with unsigned, unencrypted PDFs.
   It includes stable annotation IDs, colors, and coordinates in unrotated PDF user space for use in other tools.
 - **Automatic local saving:** highlights, notes, drawings, and text boxes return when you reopen an
   ordinary, non-password-protected PDF. Use **Save a copy** to share page annotations with other readers.
+
+<p>
+  <a href="docs/screenshots/pen-widths.png"><img src="docs/screenshots/pen-widths.png" width="485" alt="Thin, Medium, and Thick pen strokes on the same page"></a>
+  <a href="docs/screenshots/scan-languages.png"><img src="docs/screenshots/scan-languages.png" width="250" alt="English and Arabic selected in the scan language picker, with the download size shown"></a>
+</p>
 
 ### Add handwritten signatures
 
@@ -132,12 +148,13 @@ Choose **Sign** in the toolbar to add a signature.
   not certificate-based digital signatures. Use **Save a copy** to keep a signed PDF; placed signatures are not part
   of Folio's automatic annotation restoration.
 - **Optional reuse:** choose to remember a signature on this computer; remove the saved image in
-  **Settings → Signature → Forget**.
+  **Settings → Storage → Signature → Forget**.
 
 ### Ask AI about a document
 
-- **Bring your own subscription:** use **Sign in with ChatGPT** or your Claude subscription through
-  [Claude Code](https://claude.com/claude-code). No API key or separate Folio account is needed.
+- **Choose a provider:** use your ChatGPT plan, your Claude subscription through
+  [Claude Code](https://claude.com/claude-code), your own OpenRouter API key, or any OpenAI-compatible endpoint, such as
+  another provider's API or a model running on your computer.
 - **Whole-document or passage questions:** open the Ask AI panel from the toolbar, select text and choose **Ask AI**,
   or ask about an existing highlight.
 - **Streaming answers** with clickable page citations that jump back to the source page.
@@ -147,7 +164,10 @@ Choose **Sign** in the toolbar to add a signature.
 - **Provider and model selection**, a stop button for an in-progress answer, and a **+** button to start a fresh
   conversation.
 - **Per-document history:** conversations are saved on this computer and restored when you reopen that document,
-  except for password-protected PDFs. Starting a new conversation clears that document's saved chat.
+  except for password-protected PDFs. The **+** button asks for confirmation before deleting that document's current
+  conversation and starting a new one. Choose **Cancel** to keep it.
+  Open **Settings → Storage → Stored data** to see how many documents have saved annotations or chats, including documents
+  removed from Recent. You can clear either category separately. Annotations include document notes and bookmarks.
 - **Account settings:** choose your default provider, sign in to or out of ChatGPT, and check Claude Code's connection
   from **Settings → Ask AI**.
 
@@ -163,7 +183,7 @@ Ask AI is optional and desktop-only. See [Using Ask AI](#using-ask-ai) for setup
 ### Pick up where you left off
 
 - **Recent library:** keep up to eight recently opened PDFs with thumbnail previews and the last page read; reopen
-  with one click, remove individual entries, or choose **Clear all**.
+  with one click, remove individual entries, or choose **Clear all**. Removing entries also removes their saved recognized text; **Clear all** removes all saved recognized text. You can also clear saved recognized text from Settings without removing documents.
 - **Startup restore:** reopen the last active document automatically when it is still in the recent library.
 - **Reading state:** remember each document's page, scroll position, zoom, rotation, sidebar visibility, and two-page
   mode.
@@ -174,15 +194,25 @@ Ask AI is optional and desktop-only. See [Using Ask AI](#using-ask-ai) for setup
 - **Save a copy** (`Ctrl+S`) exports a PDF with page annotations, including highlights and attached notes, drawings,
   text boxes, and visual signatures. Your original file is not overwritten. Whole-document notes and AI chat history
   stay in Folio; copy notes as Markdown when you want to share them.
-- **Print** (`Ctrl+P`) prints the current document with its page annotations.
+- **Print** (`Ctrl+P`, or `⌘P` on macOS) previews each page at its own proportions and prints the annotated PDF. On desktop, choose **Advanced** for [poster, booklet, or multiple pages per sheet](docs/printing.md).
 - **Document info** shows available metadata: filename, title, author, subject, page count and size, file size,
   creation/modification dates, generating application, producer, and PDF version.
 
+<p>
+  <a href="docs/screenshots/print-preview.png"><img src="docs/screenshots/print-preview.png" width="344" alt="The current PDF page in the Basic print preview"></a>
+  <a href="docs/screenshots/booklet-printing.png"><img src="docs/screenshots/booklet-printing.png" width="462" alt="Two PDF pages paired on a landscape sheet for booklet printing"></a>
+</p>
+
 ### Settings and updates
 
-Open **⋯ → Settings** or press `Ctrl+,` for appearance, night reading, AI accounts and defaults, remembered signatures,
-and updates. **About Folio** shows the version, installed/portable edition, and installation location, with a shortcut
-to open that folder.
+Open **⋯ → Settings** or press `Ctrl+,`. **General** contains appearance, reading, and update preferences.
+Use **Ask AI** to connect providers and **Storage** to manage saved annotations, conversations, and signatures.
+**About Folio** shows the version, installed/portable edition, and installation location, with a shortcut to open that folder.
+
+<p>
+  <a href="docs/screenshots/openrouter-setup.png"><img src="docs/screenshots/openrouter-setup.png" width="395" alt="Ask AI settings with OpenRouter selected and a field for an API key"></a>
+  <a href="docs/screenshots/stored-data.png"><img src="docs/screenshots/stored-data.png" width="380" alt="Storage settings with separate controls for clearing saved annotations and Ask AI conversations"></a>
+</p>
 
 - **Automatic updates on or off:** the preference survives restarts. Turning it off stops background checks/downloads
   and automatic installation; manual **Check for updates** remains available for self-updating editions.
@@ -204,6 +234,7 @@ On macOS, use `⌘` wherever this table says `Ctrl`. Press `?` with a document o
 | New tab / close tab | `Ctrl+T` / `Ctrl+W` |
 | Next tab / previous tab (Control on all platforms) | `Control+Tab` / `Control+Shift+Tab` |
 | Find / next match / previous match | `Ctrl+F` / `Enter` / `Shift+Enter` |
+| Back / forward through links | `Alt+←` / `Alt+→` (`⌥←` / `⌥→` on macOS) |
 | Highlight selection or enter Highlight mode / write a note | `H` / `N` |
 | Remove a clicked highlight | `Delete` |
 | Select / draw / add text | `V` / `D` / `T` |
@@ -218,8 +249,9 @@ On macOS, use `⌘` wherever this table says `Ctrl`. Press `?` with a document o
 
 ### Current limits
 
-- Automatic OCR adds a selection layer in the reader. The source PDF stays intact. Document-wide search,
-  signature-label detection, and whole-document AI questions use the PDF’s embedded text.
+- Automatic OCR reads scanned pages on your device using the scan languages selected in Settings. Recognized text becomes available for selection,
+  document search and Ask AI. Saving a copy adds a searchable text layer when the file can safely be rewritten.
+  Pages whose text the export font cannot represent stay available for recognition when reopened.
 - Ask AI uses extracted text, not page images, and includes up to about 400,000 characters of document text. Long
   documents may be truncated; AI answers can be wrong, so check the cited pages.
 - Folio opens PDFs up to 300 MiB and 10,000 pages. Webpage conversion uses a separate session, so pages behind a
@@ -241,6 +273,16 @@ Then pick a provider at the top of the panel:
   [ChatGPT settings](https://chatgpt.com/settings/usage). Sign out, or change the default provider, in Folio's **Settings**.
 - **Claude:** install [Claude Code](https://claude.com/claude-code), run `claude` once in a terminal, and sign in with
   your Claude account (Pro or Max). Then click **Check again** in Folio. Questions use your Claude subscription.
+- **OpenRouter:** under **Settings → Ask AI**, choose OpenRouter and verify your [OpenRouter API key](https://openrouter.ai/settings/keys).
+  Search the text models or enter a model ID. OpenRouter bills your key. Reopen this section to check the connection,
+  replace the key, or remove it. If a model's context is too small for a document, choose a larger model or ask about
+  a selected passage. For passage questions Folio sends the selected passage, page number, filename and conversation.
+- **Custom endpoint:** under **Settings → Ask AI**, choose Custom endpoint and enter the base URL of any server that
+  accepts OpenAI-style Chat Completions (for example `https://api.example.com/v1`, or `http://localhost:11434/v1` for
+  Ollama), plus its API key if it needs one. Then pick a model from the server's list or enter a model ID. The address
+  must use `https://`, except for this computer or your local network. Folio asks before it connects to an address there,
+  and later requests reach only the local addresses you approved. A plain `http://` address is never used to send to the
+  internet, even if its name later points there. That server's own terms and billing apply.
 
 Ask AI is available in the desktop app only, not the browser version.
 
@@ -250,14 +292,19 @@ Folio requires no Folio account, has no analytics or telemetry, and never upload
 network requests only to:
 
 - check GitHub for updates (installed copies; can be turned off in **Settings**),
+- download the scan language packs you choose in **Settings** from the Tesseract.js project on GitHub,
+- verify an OpenRouter key or retrieve model names during OpenRouter setup,
+- check a custom endpoint and retrieve its model names when you connect it in **Settings**,
 - open a link you give it (a webpage is loaded in a hidden, sandboxed window with its own temporary session, so no
   cookies or sign-ins are shared, and every permission is denied; its scripts run while it loads, as in any browser,
   and it's then printed to PDF), and
 - answer a question you ask in **Ask AI**. Only then, the document's text (up to about 400,000 characters), any passage
   you selected, and the conversation go to the provider you chose: OpenAI for ChatGPT, or Anthropic through your
-  installed Claude Code. Their privacy terms apply to that data.
+  installed Claude Code, OpenRouter and the provider serving your chosen OpenRouter model, or the custom endpoint you
+  entered. Their privacy terms apply to that data.
 
-For ChatGPT, Folio stores its sign-in tokens in its data folder (below, under `ai`), encrypted with the system's
+Folio stores an OpenRouter key or a custom endpoint's key only with operating-system credential protection. If secure storage is unavailable,
+enable or unlock your system key store to connect. For ChatGPT, Folio stores its sign-in tokens in its data folder (below, under `ai`), encrypted with the system's
 credential protection (Windows data protection, the macOS Keychain, or the Linux secret store; if a Linux desktop has
 no secret store, you sign in again each time Folio starts), and never exposes them to the page. For Claude, Folio runs your own Claude Code with every tool disabled;
 it never sees or stores your Claude credentials. The question's context is written to a temporary file for Claude Code
@@ -268,7 +315,7 @@ Stored locally in your user profile (`%APPDATA%\Folio` on Windows, `~/Library/Ap
 `~/.config/Folio` on Linux): recently opened PDFs and their thumbnails (up to 8,
 removable from the home screen with **Clear all**; password-protected PDFs are never kept), highlights, notes, and
 Ask AI conversations for each document (except password-protected ones), reading positions, preferences, and, only if you choose to remember
-it, your signature image. Apart from the ChatGPT sign-in, this data isn't encrypted, so anyone with access to your
+it, your signature image. Apart from provider credentials, this data isn't encrypted, so anyone with access to your
 user account can read it.
 
 ## Building from source
@@ -298,10 +345,10 @@ terminal has `ELECTRON_RUN_AS_NODE=1` set, unset it first.
   custom `app://` protocol with a strict Content Security Policy, runs the page sandboxed with context isolation, opens
   PDFs from the file manager, keeps a single window, downloads links, and handles updates. `webpage.cjs` converts
   webpages to PDF. `ai.cjs` runs Ask AI (ChatGPT
-  sign-in and requests, and Claude Code) so credentials never reach the page.
+  sign-in and requests, OpenRouter and custom endpoint keys and requests, and Claude Code). Stored credentials stay in the main process.
 - `scripts/release.mjs` and `.github/workflows/release-build.yml`: the release pipeline (see
   [CONTRIBUTING.md](CONTRIBUTING.md#releasing)). `scripts/smoke-test.mjs` is the cross-platform smoke test CI runs.
-  `scripts/screenshots.mjs` retakes the screenshots in this README (`npm run build`, then `node scripts/screenshots.mjs`).
+  `scripts/screenshots.mjs` retakes the Ask AI, highlights, and search screenshots at the top of this README (`npm run build`, then `node scripts/screenshots.mjs`).
 
 ## Contributing
 
