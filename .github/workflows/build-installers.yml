@@ -56,7 +56,8 @@ jobs:
       - name: Package macOS
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npx electron-builder --mac dmg --publish never
+        # No target list here: package.json asks for a universal build, and naming a target would build this runner's chip only.
+        run: npx electron-builder --mac --publish never
       - name: Packaged app starts (macOS)
         run: |
           release/mac-universal/Folio.app/Contents/MacOS/Folio > app.log 2>&1 &
