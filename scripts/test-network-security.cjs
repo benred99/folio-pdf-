@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const http = require("node:http");
 const net = require("node:net");
-const { once } = require("node:events");
+const { EventEmitter, once } = require("node:events");
 const { resolveDestination, guardSession } = require("../electron/network.cjs");
 
 function resolver(...addresses) {
@@ -26,7 +26,7 @@ test("two origins sharing a SOCKS address cannot substitute their grants or rout
   const session = { ...resolver("8.8.8.8"), setProxy: async () => {},
     webRequest: { onBeforeRequest: fn => { session.authorize = url => new Promise(resolve => fn({ url: url.href }, resolve)); } } };
   const system = { resolveProxy: async () => "DIRECT" };
-  const guard = await guardSession(session, system, local);
+  const guard = await guardSession(session, system, local, new EventEmitter());
   try {
     assert.deepEqual(await session.authorize(publicUrl), {});
     session.resolveHost = resolver("127.0.0.1").resolveHost;
@@ -35,6 +35,36 @@ test("two origins sharing a SOCKS address cannot substitute their grants or rout
     assert.deepEqual(await session.authorize(new URL("https://alias.test:8000/doc")), { cancel: true });
     system.resolveProxy = async () => "PROXY different.test:3128";
     assert.deepEqual(await session.authorize(publicUrl), { cancel: true });
+  } finally { guard.close(); }
+});
+
+test("a local-only guard refuses a name that moves to a public address", async () => {
+  const url = new URL("http://llm.corp.test:8000/v1/models");
+  const approved = await resolveDestination(url, resolver("10.0.0.5"));
+  const session = { ...resolver("10.0.0.5"), setProxy: async () => {},
+    webRequest: { onBeforeRequest: fn => { session.authorize = url => new Promise(resolve => fn({ url: url.href }, resolve)); } } };
+  const guard = await guardSession(session, { resolveProxy: async () => "DIRECT" }, approved, new EventEmitter(), { localOnly: true });
+  try {
+    assert.deepEqual(await session.authorize(url), {});
+    assert.equal(guard.refusedPublic(), false);
+    session.resolveHost = resolver("8.8.8.8").resolveHost;
+    assert.deepEqual(await session.authorize(url), { cancel: true });
+    assert.equal(guard.refusedPublic(), true);
+    assert.equal(guard.refusedLocal(), false);
+  } finally { guard.close(); }
+});
+
+test("a local-only guard refuses a name with any public address, even an approved one", async () => {
+  const url = new URL("http://mixed.corp.test:8000/v1/models");
+  const approved = await resolveDestination(url, resolver("10.0.0.5", "8.8.8.8"));
+  assert.equal(approved.local, true);
+  assert.equal(approved.allLocal, false);
+  const session = { ...resolver("10.0.0.5", "8.8.8.8"), setProxy: async () => {},
+    webRequest: { onBeforeRequest: fn => { session.authorize = url => new Promise(resolve => fn({ url: url.href }, resolve)); } } };
+  const guard = await guardSession(session, { resolveProxy: async () => "DIRECT" }, approved, new EventEmitter(), { localOnly: true });
+  try {
+    assert.deepEqual(await session.authorize(url), { cancel: true });
+    assert.equal(guard.refusedPublic(), true);
   } finally { guard.close(); }
 });
 
@@ -58,7 +88,7 @@ test("the system proxy gets a pinned numeric CONNECT; Chromium's tunnel stays tr
   const session = { ...resolver("8.8.8.8"), setProxy: async config => { session.config = config; },
     webRequest: { onBeforeRequest: listener => { session.authorize = listener; } } };
   const system = { resolveProxy: async () => "PROXY 127.0.0.1:" + upstream.address().port };
-  const guard = await guardSession(session, system, await resolveDestination(url, session));
+  const guard = await guardSession(session, system, await resolveDestination(url, session), new EventEmitter());
   const client = new net.Socket();
   try {
     const result = await new Promise(resolve => session.authorize({ url: url.href }, resolve));
@@ -91,4 +121,29 @@ test("the system proxy gets a pinned numeric CONNECT; Chromium's tunnel stays tr
     for (const peer of peers) peer.destroy();
     upstream.close();
   }
+});
+
+test("only the import session and its active TLS destinations decline client identities", async () => {
+  const app = new EventEmitter();
+  let authorize;
+  const session = { ...resolver("8.8.8.8"), setProxy: async () => {},
+    webRequest: { onBeforeRequest: fn => { authorize = url => new Promise(done => fn({ url }, done)); } } };
+  const guard = await guardSession(session, { resolveProxy: async () => "DIRECT" }, null, app);
+  const challenge = (contents, authority) => {
+    const calls = [];
+    app.emit("select-client-certificate", { preventDefault: () => calls.push("prevented") }, contents, authority,
+      [{}], (...certificates) => calls.push(certificates));
+    return calls;
+  };
+  try {
+    assert.deepEqual(await authorize("https://paper.test/"), {});
+    assert.deepEqual(await authorize("https://[2606:4700:4700::1111]:8443/"), {});
+    assert.deepEqual(challenge(null, "PAPER.TEST.:443"), ["prevented", []]);
+    assert.deepEqual(challenge(null, "[2606:4700:4700::1111]:8443"), ["prevented", []]);
+    assert.deepEqual(challenge({ session }, "asset.test:443"), ["prevented", []]);
+    assert.deepEqual(challenge({ session: {} }, "paper.test:443"), []);
+    assert.deepEqual(challenge(null, "paper.test:8443"), []);
+    assert.deepEqual(challenge(null, "other.test:443"), []);
+  } finally { guard.close(); }
+  assert.deepEqual(challenge(null, "paper.test:443"), []);
 });
