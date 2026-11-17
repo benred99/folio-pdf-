@@ -26,7 +26,8 @@ jobs:
       - run: npm ci
       # Everything, not --omit=dev: the libraries bundled into the app (pdf.js, KaTeX, the Markdown and OCR
       # code) and Electron itself are devDependencies here, so leaving them out audits almost nothing that ships.
-      - run: npm audit --audit-level=high
+      # Same as `npm audit --audit-level=high`, minus the advisories listed (with reasons) in scripts/audit.mjs.
+      - run: node scripts/audit.mjs
       - run: npm test
       - run: npm run test:chat-math
       - run: npm run test:thumbnails
