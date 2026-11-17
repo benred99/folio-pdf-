@@ -26,10 +26,19 @@ export async function readPdfBlob(blob: Blob, signal: AbortSignal, limit = MAX_P
   });
 }
 
-export async function readPdfResponse(response: Response, signal: AbortSignal, limit = MAX_PDF_BYTES) {
+export async function readPdfResponse(response: Response, signal: AbortSignal, limit = MAX_PDF_BYTES, stallMs?: number) {
   const reader = response.body?.getReader();
   const cancel = () => { void reader?.cancel().catch(() => {}); };
   signal.addEventListener("abort", cancel, { once: true });
+  // With stallMs, a transfer that goes quiet for that long ends. It limits each pause, not the whole file,
+  // so a large PDF on a slow connection still arrives.
+  let stalled = false;
+  let stallTimer: ReturnType<typeof setTimeout> | undefined;
+  const alive = () => {
+    if (!stallMs) return;
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => { stalled = true; cancel(); }, stallMs);
+  };
   try {
     signal.throwIfAborted();
     if (!response.ok) throw new Error(`The server responded with ${response.status}.`);
@@ -40,9 +49,12 @@ export async function readPdfResponse(response: Response, signal: AbortSignal, l
     let data = new Uint8Array(0);
     let size = 0;
     let checkedHeader = false;
+    alive();
     for (;;) {
       const { value, done } = await reader.read();
+      if (stalled) throw new Error("The download timed out.");
       signal.throwIfAborted();
+      alive();
       const nextSize = size + (value?.byteLength ?? 0);
       checkPdfSize(nextSize, limit);
       if (nextSize > data.length) {
@@ -64,7 +76,16 @@ export async function readPdfResponse(response: Response, signal: AbortSignal, l
     cancel();
     throw error;
   } finally {
+    clearTimeout(stallTimer);
     signal.removeEventListener("abort", cancel);
     reader?.releaseLock();
   }
+}
+
+export function checkImageFileSize(bytes: number) {
+  if (bytes > 24 * 1024 * 1024) throw new Error("Choose an image smaller than 24 MB.");
+}
+
+export function checkImageDimensions(width: number, height: number) {
+  if (width * height > 20_000_000) throw new Error("Choose an image under 20 megapixels.");
 }

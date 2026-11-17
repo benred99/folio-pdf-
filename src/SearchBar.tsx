@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./icons";
+import { keys } from "./platform";
 
 /** pdf.js FindState: FOUND 0, NOT_FOUND 1, WRAPPED 2, PENDING 3 */
 export interface FindResult {
@@ -12,10 +13,12 @@ type FindOpts = { again?: boolean; previous?: boolean; caseSensitive?: boolean; 
 
 export function SearchBar({
   result,
+  recognizing,
   onFind,
   onClose,
 }: {
   result: FindResult;
+  recognizing: boolean;
   onFind: (q: string, o: FindOpts) => void;
   onClose: () => void;
 }) {
@@ -56,7 +59,8 @@ export function SearchBar({
         }}
         spellCheck={false}
       />
-      <span className={`search-status ${query && result.total === 0 && result.state !== 3 ? "miss" : ""}`}>{status}</span>
+      <span className={`search-status ${query && result.total === 0 && result.state !== 3 && !recognizing ? "miss" : ""}`} role="status">{status}</span>
+      {query && recognizing && <span className="search-progress" role="status">Results may be incomplete while text is being recognized</span>}
       <button className={`chip ${caseSensitive ? "on" : ""}`} onClick={() => setCase(!caseSensitive)} title="Match case">
         Aa
       </button>
@@ -64,7 +68,7 @@ export function SearchBar({
         <u>ab</u>
       </button>
       <span className="divider" />
-      <button className="pill-btn" onClick={() => step(true)} disabled={!result.total} title="Previous (Shift+Enter)">
+      <button className="pill-btn" onClick={() => step(true)} disabled={!result.total} title={keys("Previous (Shift+Enter)")}>
         <Icon name="chevronUp" size={16} />
       </button>
       <button className="pill-btn" onClick={() => step(false)} disabled={!result.total} title="Next (Enter)">
